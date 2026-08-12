@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>VELOCIPING // The Pong That Never Slows Down</title>
+  <style>
+    :root {
+      --bg: #0a0d14;
+      --bg-2: #0f1420;
+      --grid: #161c2b;
+      --player: #00e5ff;
+      --ai: #ff2f78;
+      --text: #e8ecf7;
+      --text-dim: #5b6478;
+      --warn: #ffcf4d;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 0%, var(--bg-2), var(--bg) 70%);
+      font-family: 'Courier New', 'Space Mono', monospace;
+      color: var(--text);
+      touch-action: none;
+      user-select: none;
+    }
+
+    #wrap {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 18px 22px;
+      pointer-events: none;
+      z-index: 5;
+      letter-spacing: 2px;
+    }
+
+    .score {
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .score .n {
+      font-size: 34px;
+      display: block;
+      line-height: 1;
+      margin-top: 4px;
+    }
+
+    .score.you {
+      color: var(--player);
+      text-shadow: 0 0 12px rgba(0, 229, 255, .5);
+      text-align: left;
+    }
+
+    .score.cpu {
+      color: var(--ai);
+      text-shadow: 0 0 12px rgba(255, 47, 120, .5);
+      text-align: right;
+    }
+
+    #speedTag {
+      position: absolute;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 3px;
+      z-index: 5;
+    }
+
+    #speedTag b {
+      color: var(--warn);
+      font-size: 13px;
+    }
+
+    canvas {
+      display: block;
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 100% 40px,
+        var(--bg);
+      border-top: 1px solid #1c2436;
+      border-bottom: 1px solid #1c2436;
+      touch-action: none;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      background: rgba(8, 10, 16, .86);
+      backdrop-filter: blur(3px);
+      z-index: 10;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .overlay h1 {
+      font-size: clamp(28px, 8vw, 46px);
+      letter-spacing: 6px;
+      margin: 0 0 6px 0;
+      background: linear-gradient(90deg, var(--player), var(--ai));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: titlePulse 2.4s ease-in-out infinite;
+    }
+
+    @keyframes titlePulse {
+
+      0%,
+      100% {
+        filter: drop-shadow(0 0 6px rgba(0, 229, 255, .25));
+        transform: scale(1);
+      }
+
+      50% {
+        filter: drop-shadow(0 0 18px rgba(255, 47, 120, .35));
+        transform: scale(1.02);
+      }
+    }
+
+    .bestScore {
+      letter-spacing: 3px;
+      font-size: 12px;
+      color: var(--warn);
+      margin-top: 4px;
+      text-shadow: 0 0 10px rgba(255, 207, 77, .4);
+    }
+
+    .bestScore b {
+      font-size: 18px;
+      margin-left: 6px;
+    }
+
+    .points-earned {
+      font-size: 34px;
+      color: var(--warn);
+      letter-spacing: 2px;
+      margin: 6px 0 2px 0;
+      text-shadow: 0 0 14px rgba(255, 207, 77, .5);
+    }
+
+    .new-record {
+      display: none;
+      color: var(--warn);
+      font-size: 12px;
+      letter-spacing: 4px;
+      margin-top: 4px;
+      animation: recordBlink 0.9s steps(2) infinite;
+    }
+
+    @keyframes recordBlink {
+      50% {
+        opacity: 0.25;
+      }
+    }
+
+    #pointsTag {
+      position: absolute;
+      top: 52px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 3px;
+      z-index: 5;
+      text-align: center;
+    }
+
+    #pointsTag b {
+      color: var(--warn);
+      font-size: 20px;
+      display: block;
+      margin-top: 2px;
+    }
+
+    #comboTag {
+      position: absolute;
+      top: 90px;
+      left: 50%;
+      transform: translateX(-50%) scale(0.8);
+      font-size: 13px;
+      color: var(--warn);
+      letter-spacing: 3px;
+      z-index: 5;
+      font-weight: 700;
+      opacity: 0;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      text-shadow: 0 0 12px rgba(255, 207, 77, .6);
+      pointer-events: none;
+    }
+
+    #comboTag.show {
+      opacity: 1;
+      transform: translateX(-50%) scale(1);
+    }
+
+    #muteBtn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid #1c2436;
+      background: rgba(15, 20, 32, .7);
+      color: var(--text-dim);
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 6;
+      cursor: pointer;
+      pointer-events: all;
+    }
+
+    #muteBtn.muted {
+      color: var(--ai);
+      border-color: var(--ai);
+    }
+
+    .overlay p {
+      color: var(--text-dim);
+      max-width: 380px;
+      line-height: 1.6;
+      font-size: 13px;
+      letter-spacing: 1px;
+    }
+
+    .overlay .result {
+      font-size: 20px;
+      letter-spacing: 3px;
+      margin-bottom: 14px;
+      color: var(--text);
+    }
+
+    .btn {
+      margin-top: 26px;
+      padding: 14px 34px;
+      background: transparent;
+      border: 2px solid var(--player);
+      color: var(--player);
+      font-family: inherit;
+      font-size: 14px;
+      letter-spacing: 3px;
+      cursor: pointer;
+      border-radius: 2px;
+      pointer-events: all;
+    }
+
+    .btn:active {
+      background: var(--player);
+      color: var(--bg);
+    }
+
+    #hint {
+      position: absolute;
+      bottom: 16px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 11px;
+      letter-spacing: 2px;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    #copyright {
+      position: absolute;
+      bottom: 4px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: var(--text-dim);
+      opacity: 0.55;
+      font-size: 9px;
+      letter-spacing: 1px;
+      z-index: 15;
+      pointer-events: none;
+    }
+
+    #leaderboard {
+      width: 100%;
+      max-width: 280px;
+      margin: 18px 0 4px 0;
+      border-top: 1px solid #1c2436;
+      border-bottom: 1px solid #1c2436;
+      padding: 10px 0;
+    }
+
+    #leaderboard .lb-title {
+      font-size: 11px;
+      letter-spacing: 3px;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+
+    .lb-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      letter-spacing: 1px;
+      padding: 4px 6px;
+    }
+
+    .lb-row .lb-rank {
+      color: var(--text-dim);
+      width: 24px;
+      text-align: left;
+    }
+
+    .lb-row .lb-name {
+      flex: 1;
+      text-align: left;
+      color: var(--text);
+    }
+
+    .lb-row .lb-score {
+      color: var(--warn);
+      font-weight: 700;
+    }
+
+    .lb-row.lb-1 .lb-rank {
+      color: var(--warn);
+    }
+
+    .lb-row.lb-2 .lb-rank {
+      color: #c9d1e0;
+    }
+
+    .lb-row.lb-3 .lb-rank {
+      color: #c98a4b;
+    }
+
+    .lb-row.lb-highlight {
+      background: rgba(0, 229, 255, 0.12);
+      border-radius: 4px;
+      animation: lbPulse 0.9s ease-in-out 2;
+    }
+
+    @keyframes lbPulse {
+
+      0%,
+      100% {
+        background: rgba(0, 229, 255, 0.12);
+      }
+
+      50% {
+        background: rgba(0, 229, 255, 0.28);
+      }
+    }
+
+    #lastScoreMsg {
+      margin-top: 8px;
+      font-size: 11px;
+      letter-spacing: 1px;
+      min-height: 14px;
+    }
+
+    #lastScoreMsg.made-it {
+      color: var(--player);
+    }
+
+    #lastScoreMsg.missed-it {
+      color: var(--text-dim);
+    }
+
+    #nameEntry {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 14px;
+      gap: 10px;
+    }
+
+    #nameEntry p {
+      margin: 0;
+      font-size: 12px;
+      color: var(--warn);
+      letter-spacing: 2px;
+    }
+
+    #nameInput {
+      background: rgba(255, 255, 255, 0.04);
+      border: 2px solid var(--player);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 15px;
+      letter-spacing: 2px;
+      text-align: center;
+      padding: 10px 14px;
+      border-radius: 2px;
+      width: 200px;
+    }
+
+    #nameInput:focus {
+      outline: none;
+      box-shadow: 0 0 10px rgba(0, 229, 255, .4);
+    }
+
+    #submitScoreBtn {
+      padding: 10px 26px;
+      background: var(--player);
+      border: 2px solid var(--player);
+      color: var(--bg);
+      font-family: inherit;
+      font-size: 12px;
+      letter-spacing: 3px;
+      cursor: pointer;
+      border-radius: 2px;
+      pointer-events: all;
+    }
+
+    #submitConfirm {
+      font-size: 12px;
+      letter-spacing: 2px;
+      color: var(--text-dim);
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="wrap">
+    <div id="hud">
+      <div class="score you">RALLY<span class="n" id="scoreYou">0</span></div>
+      <div class="score cpu">BEST<span class="n" id="scoreCpuBest">0</span></div>
+    </div>
+    <div id="speedTag">SPEED <b id="speedVal">1.0x</b></div>
+    <div id="pointsTag">POINTS<b id="pointsVal">0</b></div>
+    <div id="comboTag">COMBO x1</div>
+    <button id="muteBtn" aria-label="Mute sound">🔊</button>
+
+    <canvas id="game"></canvas>
+
+    <div id="hint">DRAG TO MOVE YOUR PADDLE</div>
+
+    <div class="overlay" id="startScreen">
+      <h1>VELOCIPING</h1>
+      <div class="result" style="color:var(--text-dim); font-size:13px; letter-spacing:2px;">THE PONG THAT NEVER LETS
+        YOU BREATHE</div>
+      <p>Every rally makes the ball faster and earns you points. One miss ends the run — chase the high score.</p>
+      <div class="bestScore">BEST SCORE<b id="bestScoreDisplayStart">0</b></div>
+      <div id="leaderboard">
+        <div class="lb-title">TOP SCORES</div>
+        <div id="lbList"></div>
+        <div id="lastScoreMsg"></div>
+      </div>
+      <button class="btn" id="startBtn">PLAY</button>
+    </div>
+
+    <div class="overlay" id="endScreen" style="display:none;">
+      <div class="result" id="endText">GAME OVER</div>
+      <p id="endSub">Final score</p>
+      <div class="points-earned" id="pointsEarned">+0 points</div>
+      <div class="new-record" id="newRecord">NEW RECORD!</div>
+      <div class="bestScore">BEST SCORE<b id="bestScoreDisplayEnd">0</b></div>
+      <div id="nameEntry">
+        <p id="nameEntryLabel">SAVE YOUR SCORE</p>
+        <input type="text" id="nameInput" maxlength="10" placeholder="YOUR NAME">
+        <button id="submitScoreBtn">SUBMIT SCORE</button>
+      </div>
+      <div id="submitConfirm" style="display:none;"></div>
+      <button class="btn" id="retryBtn">PLAY AGAIN</button>
+    </div>
+
+    <div id="copyright">© YD Corp</div>
+  </div>
+
+  <script>
+    (function () {
+      const canvas = document.getElementById('game');
+      const ctx = canvas.getContext('2d');
+      const hud = { you: document.getElementById('scoreYou'), cpuBest: document.getElementById('scoreCpuBest') };
+      const speedVal = document.getElementById('speedVal');
+      const startScreen = document.getElementById('startScreen');
+      const endScreen = document.getElementById('endScreen');
+      const endText = document.getElementById('endText');
+      const endSub = document.getElementById('endSub');
+      const hint = document.getElementById('hint');
+      const pointsVal = document.getElementById('pointsVal');
+      const bestScoreDisplayStart = document.getElementById('bestScoreDisplayStart');
+      const bestScoreDisplayEnd = document.getElementById('bestScoreDisplayEnd');
+      const pointsEarned = document.getElementById('pointsEarned');
+      const newRecord = document.getElementById('newRecord');
+      const lbList = document.getElementById('lbList');
+      const nameEntry = document.getElementById('nameEntry');
+      const nameEntryLabel = document.getElementById('nameEntryLabel');
+      const nameInput = document.getElementById('nameInput');
+      const submitScoreBtn = document.getElementById('submitScoreBtn');
+      const submitConfirm = document.getElementById('submitConfirm');
+      const lastScoreMsg = document.getElementById('lastScoreMsg');
+
+      // --- persistence layer (localStorage, with a safe fallback if unavailable) ---
+      const STORAGE_KEY = 'velociping_save_v1';
+      let storageAvailable = true;
+      try {
+        const testKey = '__velociping_test__';
+        localStorage.setItem(testKey, '1');
+        localStorage.removeItem(testKey);
+      } catch (e) {
+        storageAvailable = false;
+        console.warn('Velociping: localStorage unavailable, scores will only persist for this session.', e);
+      }
+
+      function loadSave() {
+        const defaults = {
+          leaderboard: [
+            { name: 'YD', score: 500 },
+            { name: 'Jojo', score: 150 },
+            { name: 'Nanard', score: 100 }
+          ],
+          bestScore: 0,
+          bestRally: 0
+        };
+        if (!storageAvailable) return defaults;
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return defaults;
+          const parsed = JSON.parse(raw);
+          return {
+            leaderboard: Array.isArray(parsed.leaderboard) ? parsed.leaderboard : defaults.leaderboard,
+            bestScore: typeof parsed.bestScore === 'number' ? parsed.bestScore : 0,
+            bestRally: typeof parsed.bestRally === 'number' ? parsed.bestRally : 0
+          };
+        } catch (e) {
+          console.warn('Velociping: save data corrupted, resetting.', e);
+          return defaults;
+        }
+      }
+
+      function persistSave() {
+        if (!storageAvailable) return;
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({ leaderboard, bestScore, bestRally }));
+        } catch (e) {
+          console.warn('Velociping: could not save progress.', e);
+        }
+      }
+
+      const save = loadSave();
+      let leaderboard = save.leaderboard;
+      let bestScore = save.bestScore;   // best points across all sessions
+      let bestRally = save.bestRally;   // best rally count across all sessions
+      let pendingScore = null; // score waiting to be named & submitted
+
+      function renderLeaderboard(highlightIndex) {
+        lbList.innerHTML = leaderboard
+          .slice(0, 3)
+          .map((entry, i) => `
+        <div class="lb-row lb-${i + 1}${i === highlightIndex ? ' lb-highlight' : ''}">
+          <span class="lb-rank">${i + 1}</span>
+          <span class="lb-name">${escapeHtml(entry.name)}</span>
+          <span class="lb-score">${entry.score}</span>
+        </div>
+      `).join('');
+      }
+
+      function escapeHtml(str) {
+        const d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+      }
+
+      function qualifiesForLeaderboard(score) {
+        return leaderboard.length < 3 || score > leaderboard[leaderboard.length - 1].score;
+      }
+
+      submitScoreBtn.addEventListener('click', () => {
+        if (pendingScore === null) return;
+        const pendingScoreSnapshot = pendingScore;
+        const name = (nameInput.value || 'PLAYER').trim().slice(0, 10) || 'PLAYER';
+        const combined = leaderboard.concat([{ name, score: pendingScoreSnapshot }]);
+        combined.sort((a, b) => b.score - a.score);
+        const newIndex = combined.slice(0, 3).findIndex(e => e.name === name && e.score === pendingScoreSnapshot);
+        leaderboard = combined.slice(0, 3);
+        persistSave();
+
+        pendingScore = null;
+        nameEntry.style.display = 'none';
+        nameInput.value = '';
+        sfx.click();
+
+        // back to the title screen so the player sees their freshly saved score
+        endScreen.style.display = 'none';
+        startScreen.style.display = 'flex';
+        state = 'idle';
+        renderLeaderboard(newIndex);
+
+        if (newIndex >= 0) {
+          lastScoreMsg.textContent = `${name} made the Top 3 with ${pendingScoreSnapshot} pts!`;
+          lastScoreMsg.className = 'made-it';
+          setTimeout(() => renderLeaderboard(), 2600); // clear the row highlight after a moment
+        } else {
+          lastScoreMsg.textContent = `Saved: ${name} — ${pendingScoreSnapshot} pts (not in the Top 3 yet)`;
+          lastScoreMsg.className = 'missed-it';
+        }
+      });
+
+      renderLeaderboard();
+      bestScoreDisplayStart.textContent = bestScore;
+      hud.cpuBest.textContent = bestRally;
+
+      let points = 0;      // points earned in the current run
+      let comboCount = 0;  // consecutive successful player returns
+      let muted = false;
+      const comboTag = document.getElementById('comboTag');
+      const muteBtn = document.getElementById('muteBtn');
+
+      function comboMult() {
+        return Math.min(3, 1 + Math.floor(comboCount / 3) * 0.5);
+      }
+
+      function updateComboDisplay() {
+        const mult = comboMult();
+        if (comboCount >= 3) {
+          comboTag.textContent = `COMBO x${mult}`;
+          comboTag.classList.add('show');
+        } else {
+          comboTag.classList.remove('show');
+        }
+      }
+
+      muteBtn.addEventListener('click', () => {
+        muted = !muted;
+        muteBtn.classList.toggle('muted', muted);
+        muteBtn.textContent = muted ? '🔇' : '🔊';
+        if (!muted) { ensureAudio(); sfx.click(); }
+      });
+
+      // --- sound engine (synthesized, no audio files) ---
+      let actx = null;
+      function ensureAudio() {
+        if (!actx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          actx = new AC();
+        }
+        if (actx.state === 'suspended') actx.resume();
+      }
+
+      function tone(freq, duration, type, gainStart, opts) {
+        if (muted || !actx) return;
+        opts = opts || {};
+        const t0 = actx.currentTime;
+        const osc = actx.createOscillator();
+        const gain = actx.createGain();
+        osc.type = type || 'square';
+        osc.frequency.setValueAtTime(freq, t0);
+        if (opts.slideTo) {
+          osc.frequency.exponentialRampToValueAtTime(Math.max(opts.slideTo, 1), t0 + duration);
+        }
+        gain.gain.setValueAtTime(gainStart, t0);
+        gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
+        osc.connect(gain);
+        gain.connect(actx.destination);
+        osc.start(t0);
+        osc.stop(t0 + duration + 0.02);
+      }
+
+      const sfx = {
+        hit(speedMult) {
+          if (!actx) return;
+          // pitch rises with current ball speed -> reinforces the "faster = more intense" feel
+          const base = 220 + (speedMult - 1) * 110;
+          tone(base, 0.08, 'square', 0.09, { slideTo: base * 1.3 });
+        },
+        wall() {
+          if (!actx) return;
+          tone(140, 0.05, 'triangle', 0.05);
+        },
+        scorePlayer() {
+          if (!actx) return;
+          tone(440, 0.09, 'square', 0.08, { slideTo: 660 });
+          setTimeout(() => actx && tone(660, 0.12, 'square', 0.07, { slideTo: 880 }), 90);
+        },
+        scoreCpu() {
+          if (!actx) return;
+          tone(220, 0.14, 'sawtooth', 0.08, { slideTo: 110 });
+        },
+        win() {
+          if (!actx) return;
+          [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => actx && tone(f, 0.16, 'square', 0.08), i * 100));
+        },
+        lose() {
+          if (!actx) return;
+          [392, 330, 261, 196].forEach((f, i) => setTimeout(() => actx && tone(f, 0.18, 'sawtooth', 0.07), i * 110));
+        },
+        click() {
+          if (!actx) return;
+          tone(700, 0.05, 'square', 0.06, { slideTo: 900 });
+        }
+      };
+
+      let W, H;
+      function resize() {
+        const maxW = Math.min(window.innerWidth * 0.94, 480);
+        const maxH = window.innerHeight * 0.66;
+        W = canvas.width = Math.floor(maxW);
+        H = canvas.height = Math.floor(maxH);
+      }
+      resize();
+      window.addEventListener('resize', resize);
+
+      // --- game constants ---
+      const BASE_SPEED = 4.2;
+      const SPEED_STEP = 1.10; // multiplier per paddle hit
+      const MAX_SPEED_MULT = 4.5;
+      const PADDLE_W_RATIO = 0.24; // relative to width, paddles are horizontal (top/bottom)
+      const PADDLE_H = 12;
+      const BALL_R = 7;
+
+      let state = 'idle'; // idle | playing | over
+      let scoreYou = 0; // rally count in current run
+      let speedMult = 1;
+      let ball, playerX, cpuX, playerTargetX;
+      let shake = 0;
+      let trail = [];
+
+      function resetPositions(servingToPlayer) {
+        playerX = W / 2;
+        cpuX = W / 2;
+        playerTargetX = playerX;
+        const angle = (Math.random() * 0.6 - 0.3); // slight random angle
+        const dir = servingToPlayer ? 1 : -1;
+        ball = {
+          x: W / 2, y: H / 2,
+          vx: Math.sin(angle) * BASE_SPEED,
+          vy: Math.cos(angle) * BASE_SPEED * dir,
+          r: BALL_R
+        };
+        speedMult = 1;
+        trail = [];
+        updateSpeedTag();
+      }
+
+      function updateSpeedTag() {
+        speedVal.textContent = speedMult.toFixed(1) + 'x';
+      }
+
+      function colorForSpeed(mult) {
+        // interpolate cyan -> yellow -> red as speed increases
+        const t = Math.min((mult - 1) / (MAX_SPEED_MULT - 1), 1);
+        let r, g, b;
+        if (t < 0.5) {
+          const tt = t / 0.5;
+          r = Math.round(0 + tt * 255);
+          g = Math.round(229 + tt * (207 - 229));
+          b = Math.round(255 + tt * (77 - 255));
+        } else {
+          const tt = (t - 0.5) / 0.5;
+          r = Math.round(255 + tt * (255 - 255));
+          g = Math.round(207 + tt * (47 - 207));
+          b = Math.round(77 + tt * (120 - 77));
+        }
+        return `rgb(${r},${g},${b})`;
+      }
+
+      function startGame() {
+        scoreYou = 0;
+        points = 0;
+        comboCount = 0;
+        hud.you.textContent = 0;
+        pointsVal.textContent = 0;
+        updateComboDisplay();
+        startScreen.style.display = 'none';
+        endScreen.style.display = 'none';
+        state = 'playing';
+        resetPositions(Math.random() > 0.5);
+      }
+
+      function endGame() {
+        state = 'over';
+        endText.textContent = 'GAME OVER';
+        endText.style.color = 'var(--ai)';
+
+        const isRallyRecord = scoreYou > bestRally;
+        if (isRallyRecord) { bestRally = scoreYou; }
+        hud.cpuBest.textContent = bestRally;
+
+        endSub.textContent = `${scoreYou} rallies  ·  top speed ${speedMult.toFixed(1)}x`;
+        pointsEarned.textContent = `+${points} points`;
+
+        const isRecord = points > bestScore;
+        if (isRecord) { bestScore = points; }
+        newRecord.style.display = isRecord ? 'block' : 'none';
+        bestScoreDisplayEnd.textContent = bestScore;
+        bestScoreDisplayStart.textContent = bestScore;
+
+        pendingScore = points;
+        nameEntry.style.display = 'flex';
+        submitConfirm.style.display = 'none';
+        nameEntryLabel.textContent = qualifiesForLeaderboard(points) ? 'TOP 3! ENTER YOUR NAME' : 'SAVE YOUR SCORE';
+        nameInput.value = '';
+        nameInput.focus();
+
+        persistSave();
+
+        endScreen.style.display = 'flex';
+      }
+
+      // --- input (drag to move player paddle, bottom of screen) ---
+      function setPointerX(clientX) {
+        const rect = canvas.getBoundingClientRect();
+        const x = (clientX - rect.left) * (W / rect.width);
+        playerTargetX = Math.max(0, Math.min(W, x));
+      }
+      canvas.addEventListener('touchstart', e => { setPointerX(e.touches[0].clientX); }, { passive: true });
+      canvas.addEventListener('touchmove', e => { setPointerX(e.touches[0].clientX); }, { passive: true });
+      canvas.addEventListener('mousedown', e => { setPointerX(e.clientX); dragging = true; });
+      window.addEventListener('mousemove', e => { if (dragging) setPointerX(e.clientX); });
+      window.addEventListener('mouseup', () => dragging = false);
+      let dragging = false;
+
+      document.getElementById('startBtn').addEventListener('click', () => { ensureAudio(); sfx.click(); startGame(); });
+      document.getElementById('retryBtn').addEventListener('click', () => { ensureAudio(); sfx.click(); startGame(); });
+
+      // --- main loop ---
+      function paddleW() { return W * PADDLE_W_RATIO; }
+
+      function update() {
+        if (state !== 'playing') return;
+
+        // smooth player paddle toward target
+        playerX += (playerTargetX - playerX) * 0.35;
+        playerX = Math.max(paddleW() / 2, Math.min(W - paddleW() / 2, playerX));
+
+        // simple CPU AI: tracks ball with limited speed + slight error, gets a bit better as game progresses but never perfect
+        const cpuMaxSpeed = 3.2 + speedMult * 0.9;
+        const error = (Math.random() - 0.5) * 18;
+        const cpuTarget = ball.x + error;
+        const diff = cpuTarget - cpuX;
+        cpuX += Math.max(-cpuMaxSpeed, Math.min(cpuMaxSpeed, diff));
+        cpuX = Math.max(paddleW() / 2, Math.min(W - paddleW() / 2, cpuX));
+
+        // move ball
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+
+        // trail
+        trail.push({ x: ball.x, y: ball.y });
+        if (trail.length > 10) trail.shift();
+
+        // wall bounce left/right
+        if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx *= -1; sfx.wall(); }
+        if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.vx *= -1; sfx.wall(); }
+
+        // paddle collision - bottom (player)
+        const pTop = H - 28;
+        if (ball.vy > 0 && ball.y + ball.r >= pTop && ball.y + ball.r <= pTop + PADDLE_H + 6) {
+          if (Math.abs(ball.x - playerX) <= paddleW() / 2 + ball.r) {
+            const hitPos = (ball.x - playerX) / (paddleW() / 2); // -1..1
+            bounce(hitPos, -1);
+            comboCount++;
+            points += Math.round(10 * speedMult * comboMult());
+            pointsVal.textContent = points;
+            updateComboDisplay();
+            sfx.hit(speedMult);
+          }
+        }
+        // paddle collision - top (cpu)
+        const cTop = 28;
+        if (ball.vy < 0 && ball.y - ball.r <= cTop && ball.y - ball.r >= cTop - PADDLE_H - 6) {
+          if (Math.abs(ball.x - cpuX) <= paddleW() / 2 + ball.r) {
+            const hitPos = (ball.x - cpuX) / (paddleW() / 2);
+            bounce(hitPos, 1);
+            sfx.hit(speedMult);
+          }
+        }
+
+        // scoring
+        if (ball.y < -20) {
+          scoreYou++; hud.you.textContent = scoreYou;
+          shake = 12;
+          sfx.scorePlayer();
+          resetPositions(false);
+        } else if (ball.y > H + 20) {
+          // player missed the ball -> single life, game over
+          shake = 12;
+          comboCount = 0;
+          updateComboDisplay();
+          sfx.lose();
+          endGame();
+          return;
+        }
+
+        if (shake > 0) shake *= 0.85;
+      }
+
+      function bounce(hitPos, dir) {
+        speedMult = Math.min(MAX_SPEED_MULT, speedMult * SPEED_STEP);
+        updateSpeedTag();
+        const speed = BASE_SPEED * speedMult;
+        const angle = hitPos * 1.1; // steer based on where it hit the paddle
+        ball.vx = Math.sin(angle) * speed;
+        ball.vy = Math.cos(angle) * speed * dir;
+        ball.y += dir * 2; // nudge out of collision
+        shake = Math.min(10, 2 + speedMult);
+      }
+
+      function draw() {
+        ctx.save();
+        if (shake > 0.3) {
+          ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+        }
+        ctx.clearRect(-20, -20, W + 40, H + 40);
+
+        // center line
+        ctx.strokeStyle = '#1c2436';
+        ctx.setLineDash([6, 8]);
+        ctx.beginPath();
+        ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        if (state === 'playing' || state === 'over') {
+          // paddles
+          const pw = paddleW();
+          ctx.fillStyle = 'var(--ai)'.startsWith('var') ? getComputedStyle(document.documentElement).getPropertyValue('--ai') : '#ff2f78';
+          ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 14;
+          roundRect(cpuX - pw / 2, 20, pw, PADDLE_H, 6); ctx.fill();
+
+          ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--player');
+          ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 14;
+          roundRect(playerX - pw / 2, H - 20 - PADDLE_H, pw, PADDLE_H, 6); ctx.fill();
+
+          // trail
+          for (let i = 0; i < trail.length; i++) {
+            const t = trail[i];
+            const a = (i + 1) / trail.length;
+            ctx.globalAlpha = a * 0.35;
+            ctx.beginPath();
+            ctx.fillStyle = colorForSpeed(speedMult);
+            ctx.arc(t.x, t.y, BALL_R * a, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+
+          // ball
+          ctx.shadowBlur = 20;
+          ctx.shadowColor = colorForSpeed(speedMult);
+          ctx.fillStyle = colorForSpeed(speedMult);
+          ctx.beginPath();
+          ctx.arc(ball.x, ball.y, BALL_R, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+
+        ctx.restore();
+      }
+
+      function roundRect(x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      }
+
+      function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+      }
+      resetPositions(true);
+      loop();
+    })();
+  </script>
+</body>
+
+</html>
