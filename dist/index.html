@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+  <title>VELOCIPING // The Pong That Never Slows Down</title>
+
+  <style>
+    :root {
+      --bg: #0a0d14;
+      --bg-2: #0f1420;
+      --grid: #161c2b;
+      --player: #00e5ff;
+      --ai: #ff2f78;
+      --text: #e8ecf7;
+      --text-dim: #5b6478;
+      --warn: #ffcf4d;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 0%, var(--bg-2), var(--bg) 70%);
+      font-family: 'Courier New', 'Space Mono', monospace;
+      color: var(--text);
+      touch-action: none;
+      user-select: none;
+    }
+
+    #wrap {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 18px 22px;
+      pointer-events: none;
+      z-index: 5;
+      letter-spacing: 2px;
+    }
+
+    .score {
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .score .n {
+      font-size: 34px;
+      display: block;
+      line-height: 1;
+      margin-top: 4px;
+    }
+
+    .score.you {
+      color: var(--player);
+      text-shadow: 0 0 12px rgba(0, 229, 255, .5);
+      text-align: left;
+    }
+
+    .score.cpu {
+      color: var(--ai);
+      text-shadow: 0 0 12px rgba(255, 47, 120, .5);
+      text-align: right;
+    }
+
+    #speedTag {
+      position: absolute;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 3px;
+      z-index: 5;
+    }
+
+    #speedTag b {
+      color: var(--warn);
+      font-size: 13px;
+    }
+
+    canvas {
+      display: block;
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 100% 40px,
+        var(--bg);
+      border-top: 1px solid #1c2436;
+      border-bottom: 1px solid #1c2436;
+      touch-action: none;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      background: rgba(8, 10, 16, .86);
+      backdrop-filter: blur(3px);
+      z-index: 10;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .overlay h1 {
+      font-size: clamp(28px, 8vw, 46px);
+      letter-spacing: 6px;
+      margin: 0 0 6px 0;
+      background: linear-gradient(90deg, var(--player), var(--ai));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: titlePulse 2.4s ease-in-out infinite;
+    }
+
+    @keyframes titlePulse {
+
+      0%,
+      100% {
+        filter: drop-shadow(0 0 6px rgba(0, 229, 255, .25));
+        transform: scale(1);
+      }
+
+      50% {
+        filter: drop-shadow(0 0 18px rgba(255, 47, 120, .35));
+        transform: scale(1.02);
+      }
+    }
+
+    .bestScore {
+      letter-spacing: 3px;
+      font-size: 12px;
+      color: var(--warn);
+      margin-top: 4px;
+      text-shadow: 0 0 10px rgba(255, 207, 77, .4);
+    }
+
+    .bestScore b {
+      font-size: 18px;
+      margin-left: 6px;
+    }
+
+    .points-earned {
+      font-size: 34px;
+      color: var(--warn);
+      letter-spacing: 2px;
+      margin: 6px 0 2px 0;
+      text-shadow: 0 0 14px rgba(255, 207, 77, .5);
+    }
+
+    .new-record {
+      display: none;
+      color: var(--warn);
+      font-size: 12px;
+      letter-spacing: 4px;
+      margin-top: 4px;
+      animation: recordBlink 0.9s steps(2) infinite;
+    }
+
+    @keyframes recordBlink {
+      50% {
+        opacity: 0.25;
+      }
+    }
+
+    #pointsTag {
+      position: absolute;
+      top: 52px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 3px;
+      z-index: 5;
+      text-align: center;
+    }
+
+    #pointsTag b {
+      color: var(--warn);
+      font-size: 20px;
+      display: block;
+      margin-top: 2px;
+    }
+
+    #comboTag {
+      position: absolute;
+      top: 90px;
+      left: 50%;
+      transform: translateX(-50%) scale(0.8);
+      font-size: 13px;
+      color: var(--warn);
+      letter-spacing: 3px;
+      z-index: 5;
+      font-weight: 700;
+      opacity: 0;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      text-shadow: 0 0 12px rgba(255, 207, 77, .6);
+      pointer-events: none;
+    }
+
+    #comboTag.show {
+      opacity: 1;
+      transform: translateX(-50%) scale(1);
+    }
+
+    #muteBtn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid #1c2436;
+      background: rgba(15, 20, 32, .7);
+      color: var(--text-dim);
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 6;
+      cursor: pointer;
+      pointer-events: all;
+    }
+
+    #muteBtn.muted {
+      color: var(--ai);
+      border-color: var(--ai);
+    }
+
+    .overlay p {
+      color: var(--text-dim);
+      max-width: 380px;
+      line-height: 1.6;
+      font-size: 13px;
+      letter-spacing: 1px;
+    }
+
+    .overlay .result {
+      font-size: 20px;
+      letter-spacing: 3px;
+      margin-bottom: 14px;
+      color: var(--text);
+    }
+
+    .btn {
+      margin-top: 26px;
+      padding: 14px 34px;
+      background: transparent;
+      border: 2px solid var(--player);
+      color: var(--player);
+      font-family: inherit;
+      font-size: 14px;
+      letter-spacing: 3px;
+      cursor: pointer;
+      border-radius: 2px;
+      pointer-events: all;
+    }
+
+    .btn:active {
+      background: var(--player);
+      color: var(--bg);
+    }
+
+    #hint {
+      position: absolute;
+      bottom: 16px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 11px;
+      letter-spacing: 2px;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    #copyright {
+      position: absolute;
+      bottom: 4px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: var(--text-dim);
+      opacity: 0.55;
+      font-size: 9px;
+      letter-spacing: 1px;
+      z-index: 15;
+      pointer-events: none;
+    }
+
+    #leaderboard {
+      width: 100%;
+      max-width: 280px;
+      margin: 18px 0 4px 0;
+      border-top: 1px solid #1c2436;
+      border-bottom: 1px solid #1c2436;
+      padding: 10px 0;
+    }
+
+    #leaderboard .lb-title {
+      font-size: 11px;
+      letter-spacing: 3px;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+
+    .lb-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      letter-spacing: 1px;
+      padding: 4px 6px;
+    }
+
+    .lb-row .lb-rank {
+      color: var(--text-dim);
+      width: 24px;
+      text-align: left;
+    }
+
+    .lb-row .lb-name {
+      flex: 1;
+      text-align: left;
+      color: var(--text);
+    }
+
+    .lb-row .lb-score {
+      color: var(--warn);
+      font-weight: 700;
+    }
+
+    .lb-row.lb-1 .lb-rank {
+      color: var(--warn);
+    }
+
+    .lb-row.lb-2 .lb-rank {
+      color: #c9d1e0;
+    }
+
+    .lb-row.lb-3 .lb-rank {
+      color: #c98a4b;
+    }
+
+    .lb-row.lb-highlight {
+      background: rgba(0, 229, 255, 0.12);
+      border-radius: 4px;
+      animation: lbPulse 0.9s ease-in-out 2;
+    }
+
+    @keyframes lbPulse {
+
+      0%,
+      100% {
+        background: rgba(0, 229, 255, 0.12);
+      }
+
+      50% {
+        background: rgba(0, 229, 255, 0.28);
+      }
+    }
+
+    #lastScoreMsg {
+      margin-top: 8px;
+      font-size: 11px;
+      letter-spacing: 1px;
+      min-height: 14px;
+    }
+
+    #lastScoreMsg.made-it {
+      color: var(--player);
+    }
+
+    #lastScoreMsg.missed-it {
+      color: var(--text-dim);
+    }
+
+    #nameEntry {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 14px;
+      gap: 10px;
+    }
+
+    #nameEntry p {
+      margin: 0;
+      font-size: 12px;
+      color: var(--warn);
+      letter-spacing: 2px;
+    }
+
+    #nameInput {
+      background: rgba(255, 255, 255, 0.04);
+      border: 2px solid var(--player);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 15px;
+      letter-spacing: 2px;
+      text-align: center;
+      padding: 10px 14px;
+      border-radius: 2px;
+      width: 200px;
+    }
+
+    #nameInput:focus {
+      outline: none;
+      box-shadow: 0 0 10px rgba(0, 229, 255, .4);
+    }
+
+    #submitScoreBtn {
+      padding: 10px 26px;
+      background: var(--player);
+      border: 2px solid var(--player);
+      color: var(--bg);
+      font-family: inherit;
+      font-size: 12px;
+      letter-spacing: 3px;
+      cursor: pointer;
+      border-radius: 2px;
+      pointer-events: all;
+    }
+
+    #submitConfirm {
+      font-size: 12px;
+      letter-spacing: 2px;
+      color: var(--text-dim);
+      margin-top: 10px;
+    }
+  </style>
+  <script type="module" crossorigin src="/assets/index-CYSt7V2G.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/consent-status.enum-BQztULgC.js">
+</head>
+
+<body>
+
+  <div id="wrap">
+
+    <div id="hud">
+      <div class="score you">
+        RALLY
+        <span class="n" id="scoreYou">0</span>
+      </div>
+
+      <div class="score cpu">
+        BEST
+        <span class="n" id="scoreCpuBest">0</span>
+      </div>
+    </div>
+
+    <div id="speedTag">
+      SPEED <b id="speedVal">1.0x</b>
+    </div>
+
+    <div id="pointsTag">
+      POINTS
+      <b id="pointsVal">0</b>
+    </div>
+
+    <div id="comboTag">COMBO x1</div>
+
+    <button id="muteBtn" aria-label="Mute sound">🔊</button>
+
+    <canvas id="game"></canvas>
+
+    <div id="hint">DRAG TO MOVE YOUR PADDLE</div>
+
+    <div class="overlay" id="startScreen">
+
+      <h1>VELOCIPING</h1>
+
+      <div class="result" style="color:var(--text-dim); font-size:13px; letter-spacing:2px;">
+        THE PONG THAT NEVER LETS YOU BREATHE
+      </div>
+
+      <p>
+        Every rally makes the ball faster and earns you points.
+        One miss ends the run — chase the high score.
+      </p>
+
+      <div class="bestScore">
+        BEST SCORE
+        <b id="bestScoreDisplayStart">0</b>
+      </div>
+
+      <div id="leaderboard">
+        <div class="lb-title">TOP SCORES</div>
+        <div id="lbList"></div>
+        <div id="lastScoreMsg"></div>
+      </div>
+
+      <button class="btn" id="startBtn">PLAY</button>
+
+    </div>
+
+    <div class="overlay" id="endScreen" style="display:none;">
+
+      <div class="result" id="endText">
+        GAME OVER
+      </div>
+
+      <p id="endSub">
+        Final score
+      </p>
+
+      <div class="points-earned" id="pointsEarned">
+        +0 points
+      </div>
+
+      <div class="new-record" id="newRecord">
+        NEW RECORD!
+      </div>
+
+      <div class="bestScore">
+        BEST SCORE
+        <b id="bestScoreDisplayEnd">0</b>
+      </div>
+
+      <div id="nameEntry">
+
+        <p id="nameEntryLabel">
+          SAVE YOUR SCORE
+        </p>
+
+        <input type="text" id="nameInput" maxlength="10" placeholder="YOUR NAME">
+
+        <button id="submitScoreBtn">
+          SUBMIT SCORE
+        </button>
+
+      </div>
+
+      <div id="submitConfirm" style="display:none;"></div>
+
+      <button class="btn" id="retryBtn">
+        PLAY AGAIN
+      </button>
+
+    </div>
+
+    <div id="copyright">
+      © YD Corp
+    </div>
+
+  </div>
+
+
+</body>
+
+</html>
